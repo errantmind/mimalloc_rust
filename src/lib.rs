@@ -1,5 +1,5 @@
+#![feature(core_intrinsics)]
 // Copyright 2019 Octavian Oncescu
-
 #![no_std]
 
 //! A drop-in global allocator wrapper around the [mimalloc](https://github.com/microsoft/mimalloc) allocator.
@@ -27,6 +27,7 @@ extern crate libmimalloc_sys as ffi;
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::c_void;
+use core::intrinsics::likely;
 use ffi::*;
 
 // `MI_MAX_ALIGN_SIZE` is 16 unless manually overridden:
@@ -70,7 +71,7 @@ pub struct MiMalloc;
 unsafe impl GlobalAlloc for MiMalloc {
     #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if may_use_unaligned_api(layout.size(), layout.align()) {
+        if (may_use_unaligned_api(layout.size(), layout.align())) {
             mi_malloc(layout.size()) as *mut u8
         } else {
             mi_malloc_aligned(layout.size(), layout.align()) as *mut u8
@@ -79,7 +80,7 @@ unsafe impl GlobalAlloc for MiMalloc {
 
     #[inline]
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        if may_use_unaligned_api(layout.size(), layout.align()) {
+        if (may_use_unaligned_api(layout.size(), layout.align())) {
             mi_zalloc(layout.size()) as *mut u8
         } else {
             mi_zalloc_aligned(layout.size(), layout.align()) as *mut u8
@@ -93,7 +94,7 @@ unsafe impl GlobalAlloc for MiMalloc {
 
     #[inline]
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        if may_use_unaligned_api(new_size, layout.align()) {
+        if (may_use_unaligned_api(new_size, layout.align())) {
             mi_realloc(ptr as *mut c_void, new_size) as *mut u8
         } else {
             mi_realloc_aligned(ptr as *mut c_void, new_size, layout.align()) as *mut u8

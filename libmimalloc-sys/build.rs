@@ -34,10 +34,18 @@ fn main() {
 
     // Remove heavy debug assertions etc
     build.define("MI_DEBUG", "0");
+    build.define("MI_BUILD_TESTS", "0");
+    build.define("MI_PADDING", "0");
 
     if build.get_compiler().is_like_msvc() {
         build.cpp(true);
     }
+
+    //build.opt_level_str(&"fast");
+    build.opt_level(2);
+    //build.flag("-funroll-loops");
+    build.flag("-flto=thin");
+    build.flag("-march=native");
 
     build.compile("mimalloc");
 }
