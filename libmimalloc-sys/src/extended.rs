@@ -469,25 +469,18 @@ pub type mi_option_t = c_int;
 // show_errors reversed as of 1.6.3, however what I have here is correct:
 // https://github.com/microsoft/mimalloc/issues/266#issuecomment-653822341
 
-/// Option allowing printing error messages to stderr.
+/// Print error messages to `stderr`.
 pub const mi_option_show_errors: mi_option_t = 0;
 
-/// Option allowing printing statistics to stderr when the program is done.
+/// Print statistics to `stderr` when the program is done.
 pub const mi_option_show_stats: mi_option_t = 1;
 
-/// Option allowing printing verbose messages to stderr.
+/// Print verbose messages to `stderr`.
 pub const mi_option_verbose: mi_option_t = 2;
 
-/// Option (experimental) specifying eagerly commit segments (4MiB) (enabled by default).
-pub const mi_option_eager_commit: mi_option_t = 3;
+/// ### The following options are experimental
 
-/// Option (experimental) specifying eagerly commit large (256MiB) memory regions (enabled by default, except on Windows).
-pub const mi_option_eager_region_commit: mi_option_t = 4;
-
-/// Experimental
-pub const mi_option_reset_decommits: mi_option_t = 5;
-
-/// Option (experimental) to use large OS pages (2MiB in size) if possible.
+/// Option (experimental) Use large OS pages (2MiB in size) if possible.
 ///
 /// Use large OS pages (2MiB) when available; for some workloads this can
 /// significantly improve performance. Use mi_option_verbose to check if
@@ -499,7 +492,7 @@ pub const mi_option_reset_decommits: mi_option_t = 5;
 /// instead whenever possible).
 pub const mi_option_large_os_pages: mi_option_t = 6;
 
-/// Option (experimental) specifying number of huge OS pages (1GiB in size) to reserve at the start of the program.
+/// Option (experimental) The number of huge OS pages (1GiB in size) to reserve at the start of the program.
 ///
 /// This reserves the huge pages at startup and sometimes this can give a large (latency) performance
 /// improvement on big workloads. Usually it is better to not use MIMALLOC_LARGE_OS_PAGES in
@@ -512,56 +505,39 @@ pub const mi_option_large_os_pages: mi_option_t = 6;
 /// allocate just a little to take up space in the huge OS page area (which cannot be reset).
 pub const mi_option_reserve_huge_os_pages: mi_option_t = 7;
 
-/// TODO: update later
-pub const mi_option_reserve_os_memory: mi_option_t = 8;
-
-/// Option (experimental) specifying number of segments per thread to keep cached.
-pub const mi_option_segment_cache: mi_option_t = 9;
-
-/// Option (experimental) to reset page memory after mi_option_reset_delay milliseconds when it becomes free.
+/// Option (experimental) Reserve huge OS pages at node N.
 ///
-/// By default, mimalloc will reset (or purge) OS pages that are not in use, to signal to the OS
-/// that the underlying physical memory can be reused. This can reduce memory fragmentation in
-/// long running (server) programs. By setting it to 0 this will no longer be done which can improve
-/// performance for batch-like programs. As an alternative, the mi_option_reset_delay= can be set
-/// higher (100ms by default) to make the page reset occur less frequently instead of turning it
-/// off completely.
-///
-/// Default: 1 (true)
-pub const mi_option_page_reset: mi_option_t = 10;
+/// The huge pages are usually allocated evenly among NUMA nodes.
+/// You can use mi_option_reserve_huge_os_pages_at=N where `N` is the numa node (starting at 0) to allocate all
+/// the huge pages at a specific numa node instead.
+pub const mi_option_reserve_huge_os_pages_at: mi_option_t = 8;
 
-/// Experimental
-pub const mi_option_abandoned_page_reset: mi_option_t = 11;
+/// Option (experimental) Reserve specified amount of OS memory at startup, e.g. "1g" or "512m".
+pub const mi_option_reserve_os_memory: mi_option_t = 9;
 
-/// Experimental
-pub const mi_option_segment_reset: mi_option_t = 12;
+/// Option (experimental) the first N segments per thread are not eagerly committed (=1).
+pub const mi_option_eager_commit_delay: mi_option_t = 14;
 
-/// Experimental
-pub const mi_option_eager_commit_delay: mi_option_t = 13;
+/// Option (experimental) Pretend there are at most N NUMA nodes; Use 0 to use the actual detected NUMA nodes at runtime.
+pub const mi_option_use_numa_nodes: mi_option_t = 16;
 
-/// Option (experimental) specifying delay in milli-seconds before resetting a page (100ms by default).
-pub const mi_option_reset_delay: mi_option_t = 14;
+/// Option (experimental) If set to 1, do not use OS memory for allocation (but only pre-reserved arenas)
+pub const mi_option_limit_os_alloc: mi_option_t = 17;
 
-/// Option (experimental) to pretend there are at most N NUMA nodes.
-///
-/// If not set, the actual NUMA nodes are detected at runtime. Setting N to 1 may avoid
-/// problems in some virtual environments. Also, setting it to a lower number than the
-/// actual NUMA nodes is fine and will only cause threads to potentially allocate more
-/// memory across actual NUMA nodes (but this can happen in any case as NUMA local
-/// allocation is always a best effort but not guaranteed).
-pub const mi_option_use_numa_nodes: mi_option_t = 15;
+/// Option (experimental) OS tag to assign to mimalloc'd memory
+pub const mi_option_os_tag: mi_option_t = 18;
 
-/// TODO: update later
-pub const mi_option_limit_os_alloc: mi_option_t = 16;
+/// Option (experimental)
+pub const mi_option_max_errors: mi_option_t = 19;
 
-/// Option (experimental) specifying OS tag to assign to mimalloc'd memory.
-pub const mi_option_os_tag: mi_option_t = 17;
+/// Option (experimental)
+pub const mi_option_max_warnings: mi_option_t = 20;
 
-/// Experimental
-pub const mi_option_max_errors: mi_option_t = 18;
+/// Option (experimental)
+pub const mi_option_max_segment_reclaim: mi_option_t = 21;
 
-/// Experimental
-pub const mi_option_max_warnings: mi_option_t = 19;
+/// Last option.
+pub const _mi_option_last: mi_option_t = 26;
 
 extern "C" {
     // Note: mi_option_{enable,disable} aren't exposed because they're redundant
@@ -670,6 +646,8 @@ pub struct mi_heap_area_t {
     pub used: usize,
     /// Size in bytes of one block.
     pub block_size: usize,
+    /// Size in bytes of a full block including padding and metadata.
+    pub full_block_size: usize,
 }
 
 /// Visitor function passed to [`mi_heap_visit_blocks`]
@@ -970,17 +948,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn runtime_option_page_reset() {
+    fn runtime_stable_option() {
         unsafe {
-            // page reset
-            assert_eq!(mi_option_get(mi_option_page_reset), 1);
-            mi_option_set(mi_option_page_reset, 2);
-            assert_eq!(mi_option_get(mi_option_page_reset), 2);
+            assert_eq!(mi_option_get(mi_option_show_errors), 0);
+            mi_option_set(mi_option_show_errors, 1);
+            assert_eq!(mi_option_get(mi_option_show_errors), 1);
 
-            // page reset delay
-            assert_eq!(mi_option_get(mi_option_reset_delay), 100);
-            mi_option_set(mi_option_reset_delay, 10_000);
-            assert_eq!(mi_option_get(mi_option_reset_delay), 10_000);
+            assert_eq!(mi_option_get(mi_option_show_stats), 0);
+            mi_option_set(mi_option_show_stats, 1);
+            assert_eq!(mi_option_get(mi_option_show_stats), 1);
+
+            assert_eq!(mi_option_get(mi_option_verbose), 0);
+            mi_option_set(mi_option_verbose, 1);
+            assert_eq!(mi_option_get(mi_option_verbose), 1);
         }
     }
 }

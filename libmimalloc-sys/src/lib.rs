@@ -1,6 +1,9 @@
+#![no_std]
 // Copyright 2019 Octavian Oncescu
 
 use core::ffi::c_void;
+
+extern crate libc;
 
 #[cfg(feature = "extended")]
 mod extended;
